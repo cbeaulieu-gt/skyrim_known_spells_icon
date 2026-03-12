@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JerryYOJ/Dynamic-Inventory-Icon-Injector-SKSE/refs/heads/master/schema.json",
+  "rules": [
+    {
+      "icon": {
+        "source": "EnchIcon/EnchIcon.swf",
+        "label": "enchIconLearned"
+      },
+      "match": {
+        "teachesKnownSpell": true
+      }
+    }
+  ]
+}

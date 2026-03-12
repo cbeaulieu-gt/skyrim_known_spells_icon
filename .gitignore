@@ -1,0 +1,15 @@
+build/
+.vs/
+.vscode/
+out/
+*.user
+*.suo
+*.obj
+*.pdb
+*.ilk
+*.ipdb
+*.iobj
+.tools/
+.env
+vcpkg_installed/
+.github/agents

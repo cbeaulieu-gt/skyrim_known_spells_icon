@@ -1,0 +1,9 @@
+{
+  "name": "inventory-injector-known-spells-skse",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "commonlibsse-ng",
+    "spdlog",
+    "jsoncpp"
+  ]
+}
