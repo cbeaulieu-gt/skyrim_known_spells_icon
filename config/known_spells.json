@@ -4,7 +4,8 @@
     {
       "icon": {
         "source": "EnchIcon/EnchIcon.swf",
-        "label": "enchIconLearned"
+        "label": "enchIconLearned",
+        "replace": "readIcon"
       },
       "match": {
         "teachesKnownSpell": true
