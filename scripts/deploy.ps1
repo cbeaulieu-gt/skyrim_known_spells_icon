@@ -21,7 +21,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $dotenvPath = Join-Path $repoRoot ".env"
 $presetsPath = Join-Path $repoRoot "CMakePresets.json"
 $diiiJsonSourceDir = Join-Path $repoRoot "config"
-$interfaceSwfSourceDir = Join-Path $repoRoot "assets/Interface"
+$assetsSourceDir = Join-Path $repoRoot "assets"
+$interfaceSwfSourceDir = Join-Path $assetsSourceDir "Interface"
 
 function Get-DotEnvValue {
     param(
@@ -68,7 +69,7 @@ function Get-RelativePath {
     $resolvedBase = (Resolve-Path -Path $BasePath).Path.TrimEnd('\\')
     $resolvedFull = (Resolve-Path -Path $FullPath).Path
 
-    $basePrefix = $resolvedBase + '\\'
+    $basePrefix = $resolvedBase + '\'
     if ($resolvedFull.StartsWith($basePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         return $resolvedFull.Substring($basePrefix.Length)
     }
@@ -167,13 +168,13 @@ if (Test-Path $diiiJsonSourceDir) {
 
 if (Test-Path $interfaceSwfSourceDir) {
     $deployRoot = Split-Path -Parent (Split-Path -Parent $TargetDir)
-    $interfaceTargetDir = Join-Path $deployRoot "Interface"
-    New-Item -ItemType Directory -Path $interfaceTargetDir -Force | Out-Null
+    $assetsTargetRoot = $deployRoot
 
     $swfFiles = Get-ChildItem -Path $interfaceSwfSourceDir -Filter "*.swf" -File -Recurse
     foreach ($swfFile in $swfFiles) {
-        $relativePath = Get-RelativePath -BasePath $interfaceSwfSourceDir -FullPath $swfFile.FullName
-        $destSwfPath = Join-Path $interfaceTargetDir $relativePath
+        # Preserve the full assets/Interface subtree under the game Data root.
+        $relativePath = Get-RelativePath -BasePath $assetsSourceDir -FullPath $swfFile.FullName
+        $destSwfPath = Join-Path $assetsTargetRoot $relativePath
         $destSwfDir = Split-Path -Parent $destSwfPath
         if ($destSwfDir) {
             New-Item -ItemType Directory -Path $destSwfDir -Force | Out-Null

@@ -1,0 +1,2 @@
+# Track binary game assets in Git LFS.
+assets/** filter=lfs diff=lfs merge=lfs -text

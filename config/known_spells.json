@@ -3,8 +3,8 @@
   "rules": [
     {
       "icon": {
-        "source": "EnchIcon/EnchIcon.swf",
-        "label": "enchIconLearned",
+        "source": "KnownSpellTomeIcon/KnownSpellTomeIcon.swf",
+        "label": "knownSpellTomeIcon",
         "replace": "readIcon"
       },
       "match": {
