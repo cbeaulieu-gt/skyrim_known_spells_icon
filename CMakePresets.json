@@ -17,16 +17,6 @@
       }
     },
     {
-      "name": "base-windows-global-vcpkg",
-      "hidden": true,
-      "generator": "Ninja Multi-Config",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
-      }
-    },
-    {
       "name": "vs2022-ae-debug",
       "inherits": "base-windows"
     },
@@ -41,22 +31,6 @@
     {
       "name": "vs2022-se-release",
       "inherits": "base-windows"
-    },
-    {
-      "name": "vs2022-ae-debug-global",
-      "inherits": "base-windows-global-vcpkg"
-    },
-    {
-      "name": "vs2022-ae-release-global",
-      "inherits": "base-windows-global-vcpkg"
-    },
-    {
-      "name": "vs2022-se-debug-global",
-      "inherits": "base-windows-global-vcpkg"
-    },
-    {
-      "name": "vs2022-se-release-global",
-      "inherits": "base-windows-global-vcpkg"
     }
   ],
   "buildPresets": [
@@ -78,26 +52,6 @@
     {
       "name": "build-se-release",
       "configurePreset": "vs2022-se-release",
-      "configuration": "RelWithDebInfo"
-    },
-    {
-      "name": "build-ae-debug-global",
-      "configurePreset": "vs2022-ae-debug-global",
-      "configuration": "Debug"
-    },
-    {
-      "name": "build-ae-release-global",
-      "configurePreset": "vs2022-ae-release-global",
-      "configuration": "RelWithDebInfo"
-    },
-    {
-      "name": "build-se-debug-global",
-      "configurePreset": "vs2022-se-debug-global",
-      "configuration": "Debug"
-    },
-    {
-      "name": "build-se-release-global",
-      "configurePreset": "vs2022-se-release-global",
       "configuration": "RelWithDebInfo"
     }
   ]

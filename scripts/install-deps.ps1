@@ -3,26 +3,16 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 function Resolve-VcpkgRoot {
-    $candidates = @()
-
-    if ($env:VCPKG_ROOT) {
-        $candidates += $env:VCPKG_ROOT
+    if (-not $env:VCPKG_ROOT) {
+        throw "VCPKG_ROOT is not set. Point it to your vcpkg install root (folder containing vcpkg.exe)."
     }
 
-    $candidates += (Join-Path $repoRoot ".tools/vcpkg")
-
-    foreach ($candidate in $candidates) {
-        if (-not $candidate) {
-            continue
-        }
-
-        $exePath = Join-Path $candidate "vcpkg.exe"
-        if (Test-Path $exePath) {
-            return $candidate
-        }
+    $exePath = Join-Path $env:VCPKG_ROOT "vcpkg.exe"
+    if (-not (Test-Path $exePath)) {
+        throw "vcpkg.exe was not found at '$exePath'. Fix VCPKG_ROOT and try again."
     }
 
-    throw "vcpkg.exe was not found. Set VCPKG_ROOT, or bootstrap local vcpkg at '$repoRoot/.tools/vcpkg'."
+    return $env:VCPKG_ROOT
 }
 
 $vcpkgRoot = Resolve-VcpkgRoot

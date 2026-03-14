@@ -10,7 +10,7 @@ This project is an SKSE plugin for Skyrim that marks spell tomes as known or unk
 - Visual Studio 2022 with Desktop development with C++
 - CMake 3.23+
 - Git
-- vcpkg (local bootstrap or global installation)
+- vcpkg (set VCPKG_ROOT)
 
 ## Runtime Compatibility
 

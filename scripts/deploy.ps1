@@ -3,11 +3,7 @@ param(
         "build-ae-debug",
         "build-ae-release",
         "build-se-debug",
-        "build-se-release",
-        "build-ae-debug-global",
-        "build-ae-release-global",
-        "build-se-debug-global",
-        "build-se-release-global"
+        "build-se-release"
     )]
     [string]$Preset = "build-se-release",
     [string]$TargetDir,

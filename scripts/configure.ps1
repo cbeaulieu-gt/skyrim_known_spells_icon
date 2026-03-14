@@ -1,7 +1,6 @@
 param(
     [string]$Preset = "vs2022-ae-debug",
-    [switch]$Clean,
-    [switch]$UseGlobalVcpkg
+    [switch]$Clean
 )
 
 $ErrorActionPreference = "Stop"
@@ -96,22 +95,6 @@ function Get-CachedCMakeValue {
     }
 
     return $parts[1].Trim()
-}
-
-if ($UseGlobalVcpkg) {
-    if (-not $env:VCPKG_ROOT) {
-        throw "UseGlobalVcpkg was specified, but VCPKG_ROOT is not set in this shell."
-    }
-
-    if ($Preset -notlike "*-global") {
-        $globalPreset = "$Preset-global"
-        $availablePresets = & cmake --list-presets 2>$null
-        $quotedPreset = '"' + $globalPreset + '"'
-        if ($availablePresets -match [regex]::Escape($quotedPreset)) {
-            Write-Host "Using global vcpkg preset: $globalPreset"
-            $Preset = $globalPreset
-        }
-    }
 }
 
 $presetBuildDir = Join-Path $repoRoot ("build/" + $Preset)
