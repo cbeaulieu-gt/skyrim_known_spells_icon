@@ -11,6 +11,7 @@ param(
     )]
     [string]$Preset = "build-se-release",
     [string]$TargetDir,
+    [string[]]$TargetDirs,
     [string]$BinaryName = "inventory_injector_known_spells_skse",
     [switch]$SkipPdb,
     [switch]$CreateZip,
@@ -25,8 +26,9 @@ $dotenvPath = Join-Path $repoRoot ".env"
 $presetsPath = Join-Path $repoRoot "CMakePresets.json"
 $diiiJsonSourceDir = Join-Path $repoRoot "config"
 $assetsSourceDir = Join-Path $repoRoot "assets"
-$interfaceSwfSourceDir = Join-Path $assetsSourceDir "Interface"
+$interfaceAssetsSourceDir = Join-Path $assetsSourceDir "Interface"
 $zipDeployTargetsKey = "DEPLOY_ZIP_TARGET_DIRS"
+$deployTargetsKey = "DEPLOY_TARGET_DIRS"
 $deployedFiles = @()
 
 function Get-VisualStudioDevCmd {
@@ -148,12 +150,56 @@ function Get-RelativePath {
     return [IO.Path]::GetFileName($resolvedFull)
 }
 
-if (-not $TargetDir) {
-    $TargetDir = Get-DotEnvValue -Path $dotenvPath -Key "DEPLOY_TARGET_DIR"
+function Resolve-DeployDataRoot {
+    param(
+        [string]$TargetDirPath
+    )
+
+    $normalizedTarget = $TargetDirPath.TrimEnd('\', '/')
+    if ($normalizedTarget -match '(?i)[\\/]SKSE[\\/]Plugins$') {
+        return Split-Path -Parent (Split-Path -Parent $normalizedTarget)
+    }
+
+    return $normalizedTarget
 }
 
-if (-not $TargetDir) {
-    throw "No deployment target was provided. Pass -TargetDir or set DEPLOY_TARGET_DIR in .env at $dotenvPath"
+function Resolve-PluginDeployDir {
+    param(
+        [string]$TargetDirPath
+    )
+
+    $normalizedTarget = $TargetDirPath.TrimEnd('\', '/')
+    if ($normalizedTarget -match '(?i)[\\/]SKSE[\\/]Plugins$') {
+        return $normalizedTarget
+    }
+
+    if ($normalizedTarget -match '(?i)[\\/]SKSE$') {
+        return Join-Path $normalizedTarget "Plugins"
+    }
+
+    return Join-Path (Join-Path $normalizedTarget "SKSE") "Plugins"
+}
+
+$resolvedTargetDirs = @()
+if ($TargetDirs -and $TargetDirs.Count -gt 0) {
+    $resolvedTargetDirs = $TargetDirs | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }
+}
+elseif ($TargetDir) {
+    $resolvedTargetDirs = @($TargetDir.Trim())
+}
+else {
+    $resolvedTargetDirs = Get-DotEnvPathList -Path $dotenvPath -Key $deployTargetsKey
+    if ($resolvedTargetDirs.Count -eq 0) {
+        $legacyTarget = Get-DotEnvValue -Path $dotenvPath -Key "DEPLOY_TARGET_DIR"
+        if ($legacyTarget) {
+            $resolvedTargetDirs = @($legacyTarget)
+        }
+    }
+}
+
+$resolvedTargetDirs = $resolvedTargetDirs | Select-Object -Unique
+if ($resolvedTargetDirs.Count -eq 0) {
+    throw "No deployment target was provided. Pass -TargetDir/-TargetDirs or set DEPLOY_TARGET_DIRS in .env at $dotenvPath"
 }
 
 if (-not (Test-Path $presetsPath)) {
@@ -216,72 +262,83 @@ if (-not $SkipDependencyCheck) {
     }
 }
 
-New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-$destDll = Join-Path $TargetDir ([IO.Path]::GetFileName($sourceDll))
-Copy-Item -Path $sourceDll -Destination $destDll -Force
-$deployedFiles += $destDll
-Write-Host "Deployed DLL: $destDll"
+$shouldDeployPdb = (-not $SkipPdb) -and ($configuration -ieq "Debug")
 
-if (-not $SkipPdb) {
-    $sourcePdb = [IO.Path]::ChangeExtension($sourceDll, ".pdb")
-    if (Test-Path $sourcePdb) {
-        $destPdb = Join-Path $TargetDir ([IO.Path]::GetFileName($sourcePdb))
-        Copy-Item -Path $sourcePdb -Destination $destPdb -Force
-        $deployedFiles += $destPdb
-        Write-Host "Deployed PDB: $destPdb"
+$zipSourceDeployRoot = $null
+foreach ($resolvedTargetDir in $resolvedTargetDirs) {
+    $pluginDeployDir = Resolve-PluginDeployDir -TargetDirPath $resolvedTargetDir
+    New-Item -ItemType Directory -Path $pluginDeployDir -Force | Out-Null
+
+    if (-not $zipSourceDeployRoot) {
+        $zipSourceDeployRoot = Resolve-DeployDataRoot -TargetDirPath $resolvedTargetDir
     }
-}
 
-# With the x64-windows-static-md vcpkg triplet, all dependencies (fmt, spdlog,
-# jsoncpp) are statically linked into the plugin DLL. If the triplet is changed to
-# x64-windows this block will copy the resulting dependency DLLs automatically.
-$sourceDir = Split-Path -Parent $sourceDll
-$pluginFileName = [IO.Path]::GetFileName($sourceDll)
-$depDlls = Get-ChildItem -Path $sourceDir -Filter "*.dll" |
-Where-Object { $_.Name -ne $pluginFileName }
-foreach ($dep in $depDlls) {
-    $dest = Join-Path $TargetDir $dep.Name
-    Copy-Item -Path $dep.FullName -Destination $dest -Force
-    $deployedFiles += $dest
-    Write-Host "Deployed dependency: $dest"
-}
+    $destDll = Join-Path $pluginDeployDir ([IO.Path]::GetFileName($sourceDll))
+    Copy-Item -Path $sourceDll -Destination $destDll -Force
+    $deployedFiles += $destDll
+    Write-Host "Deployed DLL: $destDll"
 
-if (Test-Path $diiiJsonSourceDir) {
-    $diiiTargetDir = Join-Path $TargetDir "DIII"
-    New-Item -ItemType Directory -Path $diiiTargetDir -Force | Out-Null
-
-    $jsonFiles = Get-ChildItem -Path $diiiJsonSourceDir -Filter "*.json" -File -Recurse
-    foreach ($jsonFile in $jsonFiles) {
-        $relativePath = Get-RelativePath -BasePath $diiiJsonSourceDir -FullPath $jsonFile.FullName
-        $destJsonPath = Join-Path $diiiTargetDir $relativePath
-        $destJsonDir = Split-Path -Parent $destJsonPath
-        if ($destJsonDir) {
-            New-Item -ItemType Directory -Path $destJsonDir -Force | Out-Null
+    if ($shouldDeployPdb) {
+        $sourcePdb = [IO.Path]::ChangeExtension($sourceDll, ".pdb")
+        if (Test-Path $sourcePdb) {
+            $destPdb = Join-Path $pluginDeployDir ([IO.Path]::GetFileName($sourcePdb))
+            Copy-Item -Path $sourcePdb -Destination $destPdb -Force
+            $deployedFiles += $destPdb
+            Write-Host "Deployed PDB: $destPdb"
         }
-
-        Copy-Item -Path $jsonFile.FullName -Destination $destJsonPath -Force
-        $deployedFiles += $destJsonPath
-        Write-Host "Deployed DIII JSON: $destJsonPath"
     }
-}
 
-if (Test-Path $interfaceSwfSourceDir) {
-    $deployRoot = Split-Path -Parent (Split-Path -Parent $TargetDir)
-    $assetsTargetRoot = $deployRoot
+    # With the x64-windows-static-md vcpkg triplet, all dependencies (fmt, spdlog,
+    # jsoncpp) are statically linked into the plugin DLL. If the triplet is changed to
+    # x64-windows this block will copy the resulting dependency DLLs automatically.
+    $sourceDir = Split-Path -Parent $sourceDll
+    $pluginFileName = [IO.Path]::GetFileName($sourceDll)
+    $depDlls = Get-ChildItem -Path $sourceDir -Filter "*.dll" |
+    Where-Object { $_.Name -ne $pluginFileName }
+    foreach ($dep in $depDlls) {
+        $dest = Join-Path $pluginDeployDir $dep.Name
+        Copy-Item -Path $dep.FullName -Destination $dest -Force
+        $deployedFiles += $dest
+        Write-Host "Deployed dependency: $dest"
+    }
 
-    $swfFiles = Get-ChildItem -Path $interfaceSwfSourceDir -Filter "*.swf" -File -Recurse
-    foreach ($swfFile in $swfFiles) {
-        # Preserve the full assets/Interface subtree under the game Data root.
-        $relativePath = Get-RelativePath -BasePath $assetsSourceDir -FullPath $swfFile.FullName
-        $destSwfPath = Join-Path $assetsTargetRoot $relativePath
-        $destSwfDir = Split-Path -Parent $destSwfPath
-        if ($destSwfDir) {
-            New-Item -ItemType Directory -Path $destSwfDir -Force | Out-Null
+    if (Test-Path $diiiJsonSourceDir) {
+        $diiiTargetDir = Join-Path $pluginDeployDir "DIII"
+        New-Item -ItemType Directory -Path $diiiTargetDir -Force | Out-Null
+
+        $jsonFiles = Get-ChildItem -Path $diiiJsonSourceDir -Filter "*.json" -File -Recurse
+        foreach ($jsonFile in $jsonFiles) {
+            $relativePath = Get-RelativePath -BasePath $diiiJsonSourceDir -FullPath $jsonFile.FullName
+            $destJsonPath = Join-Path $diiiTargetDir $relativePath
+            $destJsonDir = Split-Path -Parent $destJsonPath
+            if ($destJsonDir) {
+                New-Item -ItemType Directory -Path $destJsonDir -Force | Out-Null
+            }
+
+            Copy-Item -Path $jsonFile.FullName -Destination $destJsonPath -Force
+            $deployedFiles += $destJsonPath
+            Write-Host "Deployed DIII JSON: $destJsonPath"
         }
+    }
 
-        Copy-Item -Path $swfFile.FullName -Destination $destSwfPath -Force
-        $deployedFiles += $destSwfPath
-        Write-Host "Deployed Interface SWF: $destSwfPath"
+    if (Test-Path $interfaceAssetsSourceDir) {
+        $deployRoot = Resolve-DeployDataRoot -TargetDirPath $resolvedTargetDir
+        $assetsTargetRoot = $deployRoot
+
+        $interfaceFiles = Get-ChildItem -Path $interfaceAssetsSourceDir -File -Recurse
+        foreach ($interfaceFile in $interfaceFiles) {
+            # Preserve the full assets/Interface subtree under the game Data root.
+            $relativePath = Get-RelativePath -BasePath $assetsSourceDir -FullPath $interfaceFile.FullName
+            $destAssetPath = Join-Path $assetsTargetRoot $relativePath
+            $destAssetDir = Split-Path -Parent $destAssetPath
+            if ($destAssetDir) {
+                New-Item -ItemType Directory -Path $destAssetDir -Force | Out-Null
+            }
+
+            Copy-Item -Path $interfaceFile.FullName -Destination $destAssetPath -Force
+            $deployedFiles += $destAssetPath
+            Write-Host "Deployed Interface asset: $destAssetPath"
+        }
     }
 }
 
@@ -291,7 +348,13 @@ if ($CreateZip) {
         throw "-CreateZip was specified, but $zipDeployTargetsKey is missing or empty in .env at $dotenvPath"
     }
 
-    $deployRoot = Split-Path -Parent (Split-Path -Parent $TargetDir)
+    $deployRoot = $zipSourceDeployRoot
+    if (-not $deployRoot) {
+        throw "Could not determine deployment root for ZIP creation."
+    }
+
+    $resolvedDeployRoot = (Resolve-Path -Path $deployRoot).Path.TrimEnd('\\')
+    $deployRootPrefix = $resolvedDeployRoot + '\'
     $stagingRoot = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
     $zipFileName = "{0}-{1}.zip" -f $BinaryName, $Preset
     $zipTempPath = Join-Path ([IO.Path]::GetTempPath()) $zipFileName
@@ -301,6 +364,12 @@ if ($CreateZip) {
         $uniqueFiles = $deployedFiles | Select-Object -Unique
         foreach ($filePath in $uniqueFiles) {
             if (-not (Test-Path $filePath)) {
+                continue
+            }
+
+            $resolvedFilePath = (Resolve-Path -Path $filePath).Path
+            if (-not $resolvedFilePath.StartsWith($deployRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                # Skip files from other deployment roots to avoid duplicate root-level entries.
                 continue
             }
 
@@ -318,7 +387,22 @@ if ($CreateZip) {
             Remove-Item -Path $zipTempPath -Force
         }
 
-        Compress-Archive -Path (Join-Path $stagingRoot "*") -DestinationPath $zipTempPath -Force
+        $stagedFiles = Get-ChildItem -Path $stagingRoot -Recurse -File
+        if ($stagedFiles.Count -eq 0) {
+            throw "No files were staged for ZIP creation under $stagingRoot."
+        }
+
+        Push-Location $stagingRoot
+        try {
+            Compress-Archive -Path "*" -DestinationPath $zipTempPath -Force
+        }
+        finally {
+            Pop-Location
+        }
+
+        if (-not (Test-Path $zipTempPath)) {
+            throw "ZIP creation failed: expected archive not found at $zipTempPath"
+        }
 
         foreach ($zipTargetDir in $zipTargetDirs) {
             New-Item -ItemType Directory -Path $zipTargetDir -Force | Out-Null
