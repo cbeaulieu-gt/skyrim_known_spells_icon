@@ -12,7 +12,8 @@ param(
     [string]$Preset = "build-se-debug",
     [string]$TargetDir,
     [string]$BinaryName = "inventory_injector_known_spells_skse",
-    [switch]$SkipPdb
+    [switch]$SkipPdb,
+    [switch]$CreateZip
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +24,8 @@ $presetsPath = Join-Path $repoRoot "CMakePresets.json"
 $diiiJsonSourceDir = Join-Path $repoRoot "config"
 $assetsSourceDir = Join-Path $repoRoot "assets"
 $interfaceSwfSourceDir = Join-Path $assetsSourceDir "Interface"
+$zipDeployTargetsKey = "DEPLOY_ZIP_TARGET_DIRS"
+$deployedFiles = @()
 
 function Get-DotEnvValue {
     param(
@@ -58,6 +61,29 @@ function Get-DotEnvValue {
     }
 
     return $null
+}
+
+function Get-DotEnvPathList {
+    param(
+        [string]$Path,
+        [string]$Key
+    )
+
+    $rawValue = Get-DotEnvValue -Path $Path -Key $Key
+    if (-not $rawValue) {
+        return @()
+    }
+
+    $items = $rawValue -split "[;,]"
+    $results = @()
+    foreach ($item in $items) {
+        $trimmed = $item.Trim()
+        if ($trimmed) {
+            $results += $trimmed
+        }
+    }
+
+    return $results
 }
 
 function Get-RelativePath {
@@ -123,6 +149,7 @@ if (-not (Test-Path $sourceDll)) {
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 $destDll = Join-Path $TargetDir ([IO.Path]::GetFileName($sourceDll))
 Copy-Item -Path $sourceDll -Destination $destDll -Force
+$deployedFiles += $destDll
 Write-Host "Deployed DLL: $destDll"
 
 if (-not $SkipPdb) {
@@ -130,6 +157,7 @@ if (-not $SkipPdb) {
     if (Test-Path $sourcePdb) {
         $destPdb = Join-Path $TargetDir ([IO.Path]::GetFileName($sourcePdb))
         Copy-Item -Path $sourcePdb -Destination $destPdb -Force
+        $deployedFiles += $destPdb
         Write-Host "Deployed PDB: $destPdb"
     }
 }
@@ -145,6 +173,7 @@ Where-Object { $_.Name -ne $pluginFileName }
 foreach ($dep in $depDlls) {
     $dest = Join-Path $TargetDir $dep.Name
     Copy-Item -Path $dep.FullName -Destination $dest -Force
+    $deployedFiles += $dest
     Write-Host "Deployed dependency: $dest"
 }
 
@@ -162,6 +191,7 @@ if (Test-Path $diiiJsonSourceDir) {
         }
 
         Copy-Item -Path $jsonFile.FullName -Destination $destJsonPath -Force
+        $deployedFiles += $destJsonPath
         Write-Host "Deployed DIII JSON: $destJsonPath"
     }
 }
@@ -181,6 +211,60 @@ if (Test-Path $interfaceSwfSourceDir) {
         }
 
         Copy-Item -Path $swfFile.FullName -Destination $destSwfPath -Force
+        $deployedFiles += $destSwfPath
         Write-Host "Deployed Interface SWF: $destSwfPath"
+    }
+}
+
+if ($CreateZip) {
+    $zipTargetDirs = Get-DotEnvPathList -Path $dotenvPath -Key $zipDeployTargetsKey
+    if ($zipTargetDirs.Count -eq 0) {
+        throw "-CreateZip was specified, but $zipDeployTargetsKey is missing or empty in .env at $dotenvPath"
+    }
+
+    $deployRoot = Split-Path -Parent (Split-Path -Parent $TargetDir)
+    $stagingRoot = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+    $zipFileName = "{0}-{1}.zip" -f $BinaryName, $Preset
+    $zipTempPath = Join-Path ([IO.Path]::GetTempPath()) $zipFileName
+
+    New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+    try {
+        $uniqueFiles = $deployedFiles | Select-Object -Unique
+        foreach ($filePath in $uniqueFiles) {
+            if (-not (Test-Path $filePath)) {
+                continue
+            }
+
+            $relativePath = Get-RelativePath -BasePath $deployRoot -FullPath $filePath
+            $stagedPath = Join-Path $stagingRoot $relativePath
+            $stagedDir = Split-Path -Parent $stagedPath
+            if ($stagedDir) {
+                New-Item -ItemType Directory -Path $stagedDir -Force | Out-Null
+            }
+
+            Copy-Item -Path $filePath -Destination $stagedPath -Force
+        }
+
+        if (Test-Path $zipTempPath) {
+            Remove-Item -Path $zipTempPath -Force
+        }
+
+        Compress-Archive -Path (Join-Path $stagingRoot "*") -DestinationPath $zipTempPath -Force
+
+        foreach ($zipTargetDir in $zipTargetDirs) {
+            New-Item -ItemType Directory -Path $zipTargetDir -Force | Out-Null
+            $zipDestPath = Join-Path $zipTargetDir $zipFileName
+            Copy-Item -Path $zipTempPath -Destination $zipDestPath -Force
+            Write-Host "Deployed ZIP: $zipDestPath"
+        }
+    }
+    finally {
+        if (Test-Path $stagingRoot) {
+            Remove-Item -Path $stagingRoot -Recurse -Force
+        }
+
+        if (Test-Path $zipTempPath) {
+            Remove-Item -Path $zipTempPath -Force
+        }
     }
 }
