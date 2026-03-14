@@ -113,7 +113,6 @@ namespace
         }
 
         logger::info("Connected to DIII API v{}", api->GetVersion());
-        RegisterKnownSpellCondition(api, "knownSpellTome");
         RegisterKnownSpellCondition(api, "teachesKnownSpell");
     }
 #endif
