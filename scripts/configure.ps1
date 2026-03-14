@@ -24,6 +24,80 @@ if (-not (Test-Path $devCmd)) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $escapedDevCmd = $devCmd.Replace('/', '\\')
 
+function Get-ConfigurePresetByName {
+    param(
+        [object[]]$ConfigurePresets,
+        [string]$Name
+    )
+
+    return $ConfigurePresets | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+}
+
+function Resolve-ConfigureCacheVariables {
+    param(
+        [object[]]$ConfigurePresets,
+        [string]$PresetName
+    )
+
+    $preset = Get-ConfigurePresetByName -ConfigurePresets $ConfigurePresets -Name $PresetName
+    if (-not $preset) {
+        return @{}
+    }
+
+    $resolved = @{}
+    $parents = @()
+    if ($preset.PSObject.Properties.Name -contains "inherits") {
+        if ($preset.inherits -is [System.Array]) {
+            $parents = $preset.inherits
+        }
+        elseif ($preset.inherits) {
+            $parents = @([string]$preset.inherits)
+        }
+    }
+
+    foreach ($parent in $parents) {
+        $parentVars = Resolve-ConfigureCacheVariables -ConfigurePresets $ConfigurePresets -PresetName $parent
+        foreach ($key in $parentVars.Keys) {
+            $resolved[$key] = $parentVars[$key]
+        }
+    }
+
+    if ($preset.PSObject.Properties.Name -contains "cacheVariables") {
+        $cacheVars = $preset.cacheVariables
+        if ($cacheVars) {
+            foreach ($property in $cacheVars.PSObject.Properties) {
+                $resolved[$property.Name] = [string]$property.Value
+            }
+        }
+    }
+
+    return $resolved
+}
+
+function Get-CachedCMakeValue {
+    param(
+        [string]$CachePath,
+        [string]$VariableName
+    )
+
+    if (-not (Test-Path $CachePath)) {
+        return $null
+    }
+
+    $line = Select-String -Path $CachePath -Pattern ("^" + [regex]::Escape($VariableName) + ":[^=]+=") | Select-Object -First 1
+    if (-not $line) {
+        return $null
+    }
+
+    $rawLine = [string]$line.Line
+    $parts = $rawLine -split "=", 2
+    if ($parts.Count -ne 2) {
+        return $null
+    }
+
+    return $parts[1].Trim()
+}
+
 if ($UseGlobalVcpkg) {
     if (-not $env:VCPKG_ROOT) {
         throw "UseGlobalVcpkg was specified, but VCPKG_ROOT is not set in this shell."
@@ -41,6 +115,28 @@ if ($UseGlobalVcpkg) {
 }
 
 $presetBuildDir = Join-Path $repoRoot ("build/" + $Preset)
+
+$presetsPath = Join-Path $repoRoot "CMakePresets.json"
+if (-not (Test-Path $presetsPath)) {
+    throw "CMakePresets.json not found at $presetsPath"
+}
+
+$presets = Get-Content -Raw $presetsPath | ConvertFrom-Json
+$resolvedCacheVars = Resolve-ConfigureCacheVariables -ConfigurePresets $presets.configurePresets -PresetName $Preset
+$expectedTriplet = $null
+if ($resolvedCacheVars.ContainsKey("VCPKG_TARGET_TRIPLET")) {
+    $expectedTriplet = $resolvedCacheVars["VCPKG_TARGET_TRIPLET"]
+}
+
+$cachePath = Join-Path $presetBuildDir "CMakeCache.txt"
+if (-not $Clean -and $expectedTriplet -and (Test-Path $cachePath)) {
+    $cachedTriplet = Get-CachedCMakeValue -CachePath $cachePath -VariableName "VCPKG_TARGET_TRIPLET"
+    if ($cachedTriplet -and $cachedTriplet -ne $expectedTriplet) {
+        Write-Warning "Preset '$Preset' expects triplet '$expectedTriplet' but cache has '$cachedTriplet'. Removing stale build directory."
+        Remove-Item -Recurse -Force $presetBuildDir
+    }
+}
+
 if ($Clean -and (Test-Path $presetBuildDir)) {
     Remove-Item -Recurse -Force $presetBuildDir
 }

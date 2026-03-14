@@ -9,11 +9,13 @@ param(
         "build-se-debug-global",
         "build-se-release-global"
     )]
-    [string]$Preset = "build-se-debug",
+    [string]$Preset = "build-se-release",
     [string]$TargetDir,
     [string]$BinaryName = "inventory_injector_known_spells_skse",
     [switch]$SkipPdb,
-    [switch]$CreateZip
+    [switch]$CreateZip,
+    [switch]$AllowDebug,
+    [switch]$SkipDependencyCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +28,48 @@ $assetsSourceDir = Join-Path $repoRoot "assets"
 $interfaceSwfSourceDir = Join-Path $assetsSourceDir "Interface"
 $zipDeployTargetsKey = "DEPLOY_ZIP_TARGET_DIRS"
 $deployedFiles = @()
+
+function Get-VisualStudioDevCmd {
+    $vswhere = "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+    if (-not (Test-Path $vswhere)) {
+        throw "vswhere.exe not found. Install Visual Studio Build Tools."
+    }
+
+    $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if (-not $vsPath) {
+        throw "MSVC build tools were not found by vswhere."
+    }
+
+    $devCmd = Join-Path $vsPath "Common7/Tools/VsDevCmd.bat"
+    if (-not (Test-Path $devCmd)) {
+        throw "VsDevCmd.bat not found at $devCmd"
+    }
+
+    return $devCmd.Replace('/', '\\')
+}
+
+function Get-DllDependencies {
+    param(
+        [string]$DllPath
+    )
+
+    $escapedDevCmd = Get-VisualStudioDevCmd
+    $cmd = '"{0}" -arch=x64 && dumpbin /nologo /dependents "{1}"' -f $escapedDevCmd, $DllPath
+    $output = cmd /c $cmd 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "dumpbin failed while checking dependencies for $DllPath`n$output"
+    }
+
+    $dependencies = @()
+    foreach ($line in $output) {
+        $match = [regex]::Match([string]$line, '^\s+([A-Za-z0-9_.-]+\.dll)\s*$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($match.Success) {
+            $dependencies += $match.Groups[1].Value.ToLowerInvariant()
+        }
+    }
+
+    return $dependencies | Select-Object -Unique
+}
 
 function Get-DotEnvValue {
     param(
@@ -146,6 +190,32 @@ if (-not (Test-Path $sourceDll)) {
     throw "Built DLL not found for preset '$Preset'. Build first, then deploy. Expected: $expectedDll"
 }
 
+if ($configuration -ieq "Debug" -and -not $AllowDebug) {
+    throw "Refusing to deploy Debug artifact '$sourceDll'. Build a release preset for distribution, or pass -AllowDebug to override."
+}
+
+if (-not $SkipDependencyCheck) {
+    $dependencies = Get-DllDependencies -DllPath $sourceDll
+
+    $forbiddenDependencies = @(
+        "msvcp140d.dll",
+        "vcruntime140d.dll",
+        "vcruntime140_1d.dll",
+        "ucrtbased.dll",
+        "spdlogd.dll",
+        "fmtd.dll",
+        "spdlog.dll",
+        "fmt.dll",
+        "jsoncpp.dll"
+    )
+
+    $badDependencies = $dependencies | Where-Object { $forbiddenDependencies -contains $_ }
+    if ($badDependencies.Count -gt 0) {
+        $badList = ($badDependencies | Sort-Object -Unique) -join ", "
+        throw "Blocked deployment: plugin imports disallowed runtime dependencies: $badList. Reconfigure and rebuild with x64-windows-static-md release presets."
+    }
+}
+
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 $destDll = Join-Path $TargetDir ([IO.Path]::GetFileName($sourceDll))
 Copy-Item -Path $sourceDll -Destination $destDll -Force
@@ -163,8 +233,7 @@ if (-not $SkipPdb) {
 }
 
 # With the x64-windows-static-md vcpkg triplet, all dependencies (fmt, spdlog,
-# jsoncpp) are statically linked into the plugin DLL — no sibling DLLs are
-# produced and none need to be deployed. If the triplet is ever changed back to
+# jsoncpp) are statically linked into the plugin DLL. If the triplet is changed to
 # x64-windows this block will copy the resulting dependency DLLs automatically.
 $sourceDir = Split-Path -Parent $sourceDll
 $pluginFileName = [IO.Path]::GetFileName($sourceDll)

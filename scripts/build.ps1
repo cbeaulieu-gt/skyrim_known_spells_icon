@@ -9,7 +9,7 @@ param(
         "build-se-debug-global",
         "build-se-release-global"
     )]
-    [string]$Preset = "build-ae-debug",
+    [string]$Preset = "build-ae-release",
     [switch]$UseGlobalVcpkg
 )
 

@@ -12,6 +12,14 @@ This project is an SKSE plugin for Skyrim that marks spell tomes as known or unk
 - Git
 - vcpkg (local bootstrap or global installation)
 
+## Runtime Compatibility
+
+- Plugin metadata uses SKSE Address Library version independence.
+- One release artifact supports both SE 1.5.x and AE 1.6.x, as long as users install:
+	- matching SKSE build for their game runtime
+	- Address Library package compatible with their runtime
+- Do not distribute Debug builds. Debug artifacts depend on debug runtime DLLs that are not present on player systems.
+
 ## How to Build
 
 1. Install dependencies:
@@ -23,18 +31,23 @@ This project is an SKSE plugin for Skyrim that marks spell tomes as known or unk
 2. Configure the build:
 
 ```powershell
-./scripts/configure.ps1 -Preset vs2022-ae-debug
+./scripts/configure.ps1 -Preset vs2022-ae-release
 ```
 
 3. Build the plugin:
 
 ```powershell
-./scripts/build.ps1 -Preset build-ae-debug
+./scripts/build.ps1 -Preset build-ae-release
 ```
 
 Use SE presets instead for Skyrim SE 1.5.x:
 
 ```powershell
-./scripts/configure.ps1 -Preset vs2022-se-debug
-./scripts/build.ps1 -Preset build-se-debug
+./scripts/configure.ps1 -Preset vs2022-se-release
+./scripts/build.ps1 -Preset build-se-release
 ```
+
+## Deployment Notes
+
+- The deployment script defaults to a release preset and rejects debug artifacts unless `-AllowDebug` is explicitly provided.
+- The deployment script validates imported DLLs and blocks packages that depend on debug runtimes or dynamic fmt/spdlog/jsoncpp DLLs.
