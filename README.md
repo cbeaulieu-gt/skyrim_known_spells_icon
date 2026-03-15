@@ -22,25 +22,29 @@ This project is an SKSE plugin for Skyrim that marks spell tomes as known or unk
 
 ## How to Build
 
-1. Install dependencies:
+1. Ensure `VCPKG_ROOT` is set. Dependencies are resolved automatically when you run the configure step (CMake + vcpkg manifest mode).
+
+Optional preinstall command:
 
 ```powershell
-./scripts/install-deps.ps1
+vcpkg install --triplet x64-windows-static-md --x-manifest-root=.
 ```
 
-2. Configure the build:
+2. Configure and build a Release artifact (recommended for distribution):
 
 ```powershell
 ./scripts/configure.ps1 -Preset vs2022-release
-```
-
-3. Build the plugin:
-
-```powershell
 ./scripts/build.ps1 -Preset build-release
 ```
 
-Unified presets are version-independent for SE/AE runtime support.
+3. Optional Debug build for local testing only:
+
+```powershell
+./scripts/configure.ps1 -Preset vs2022-debug
+./scripts/build.ps1 -Preset build-debug
+```
+
+Unified presets are version-independent for SE/AE runtime support, so there are no separate AE/SE build commands.
 
 ## Deployment Notes
 
