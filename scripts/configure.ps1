@@ -1,5 +1,5 @@
 param(
-    [string]$Preset = "vs2022-ae-debug",
+    [string]$Preset = "vs2022-debug",
     [switch]$Clean
 )
 

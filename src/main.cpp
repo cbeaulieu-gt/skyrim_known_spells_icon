@@ -1,4 +1,8 @@
 #include "PCH.h"
+#include <RE/Skyrim.h>
+#include <REL/Relocation.h>
+#include <SKSE/SKSE.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #if defined(HAS_DIII_API) && HAS_DIII_API
 #include "DIII_API.h"

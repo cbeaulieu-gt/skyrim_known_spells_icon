@@ -17,41 +17,23 @@
       }
     },
     {
-      "name": "vs2022-ae-debug",
+      "name": "vs2022-debug",
       "inherits": "base-windows"
     },
     {
-      "name": "vs2022-ae-release",
-      "inherits": "base-windows"
-    },
-    {
-      "name": "vs2022-se-debug",
-      "inherits": "base-windows"
-    },
-    {
-      "name": "vs2022-se-release",
+      "name": "vs2022-release",
       "inherits": "base-windows"
     }
   ],
   "buildPresets": [
     {
-      "name": "build-ae-debug",
-      "configurePreset": "vs2022-ae-debug",
+      "name": "build-debug",
+      "configurePreset": "vs2022-debug",
       "configuration": "Debug"
     },
     {
-      "name": "build-ae-release",
-      "configurePreset": "vs2022-ae-release",
-      "configuration": "RelWithDebInfo"
-    },
-    {
-      "name": "build-se-debug",
-      "configurePreset": "vs2022-se-debug",
-      "configuration": "Debug"
-    },
-    {
-      "name": "build-se-release",
-      "configurePreset": "vs2022-se-release",
+      "name": "build-release",
+      "configurePreset": "vs2022-release",
       "configuration": "RelWithDebInfo"
     }
   ]

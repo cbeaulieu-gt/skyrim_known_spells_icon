@@ -31,21 +31,16 @@ This project is an SKSE plugin for Skyrim that marks spell tomes as known or unk
 2. Configure the build:
 
 ```powershell
-./scripts/configure.ps1 -Preset vs2022-ae-release
+./scripts/configure.ps1 -Preset vs2022-release
 ```
 
 3. Build the plugin:
 
 ```powershell
-./scripts/build.ps1 -Preset build-ae-release
+./scripts/build.ps1 -Preset build-release
 ```
 
-Use SE presets instead for Skyrim SE 1.5.x:
-
-```powershell
-./scripts/configure.ps1 -Preset vs2022-se-release
-./scripts/build.ps1 -Preset build-se-release
-```
+Unified presets are version-independent for SE/AE runtime support.
 
 ## Deployment Notes
 

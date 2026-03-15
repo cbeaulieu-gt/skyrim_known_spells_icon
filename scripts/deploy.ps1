@@ -1,11 +1,9 @@
 param(
     [ValidateSet(
-        "build-ae-debug",
-        "build-ae-release",
-        "build-se-debug",
-        "build-se-release"
+        "build-debug",
+        "build-release"
     )]
-    [string]$Preset = "build-se-release",
+    [string]$Preset = "build-release",
     [string]$TargetDir,
     [string[]]$TargetDirs,
     [string]$BinaryName = "inventory_injector_known_spells_skse",

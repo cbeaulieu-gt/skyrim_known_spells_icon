@@ -1,11 +1,9 @@
 param(
     [ValidateSet(
-        "build-ae-debug",
-        "build-ae-release",
-        "build-se-debug",
-        "build-se-release"
+        "build-debug",
+        "build-release"
     )]
-    [string]$Preset = "build-ae-release"
+    [string]$Preset = "build-release"
 )
 
 $ErrorActionPreference = "Stop"
